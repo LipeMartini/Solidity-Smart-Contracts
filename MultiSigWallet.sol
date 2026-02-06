@@ -69,7 +69,7 @@ contract MultiSigWallet {
     }
 
     function startTransaction(address payable to, uint amount) public onlyOwner {
-        require (amount <= address(this).balance, "Insufficient balance");
+        require(amount <= address(this).balance - lockedBalance, "Insufficient available balance");
         Transaction memory transaction = Transaction({
             author: msg.sender,
             hasVoted: new address[](0),
@@ -81,34 +81,36 @@ contract MultiSigWallet {
             startTimestamp: block.timestamp,
             endTimestamp: 0
         });
-        transactions[nextTransactionId] = transaction;
+        uint transactionId = nextTransactionId;
+        transactions[transactionId] = transaction;
+        transactions[transactionId].hasVoted.push(msg.sender);
+        transactions[transactionId].hasApproved.push(msg.sender);
         lockedBalance += amount;
-        emit TransactionStart(nextTransactionId, msg.sender, to, amount);
+        emit TransactionStart(transactionId, msg.sender, to, amount);
         nextTransactionId++;
     }
 
     function approveTransaction(uint transactionId) public onlyOwner {
+        require (transactions[transactionId].exists, "Transaction does not exist");
         require (transactions[transactionId].executed == false, "Transaction already executed");
         require (!contains(transactions[transactionId].hasVoted, msg.sender), "You have already voted on this transaction");
-        require (transactions[transactionId].author != msg.sender, "You cannot approve your own transaction");
         emit TransactionApprove(transactionId, msg.sender, transactions[transactionId].to, transactions[transactionId].amount);
         transactions[transactionId].hasVoted.push(msg.sender);
         transactions[transactionId].hasApproved.push(msg.sender);
     }
 
     function denyTransaction(uint transactionId) public onlyOwner {
+        require (transactions[transactionId].exists, "Transaction does not exist");
         require (transactions[transactionId].executed == false, "Transaction already executed");
         require (!contains(transactions[transactionId].hasVoted, msg.sender), "You have already voted on this transaction");
-        require (transactions[transactionId].author != msg.sender, "You cannot deny your own transaction");
         emit TransactionDenied(transactionId, msg.sender, transactions[transactionId].to);
         transactions[transactionId].hasVoted.push(msg.sender);
     }
 
     function executeTransaction(uint transactionId) public onlyOwner {
         require (transactions[transactionId].exists, "Transaction does not exist");
-        require (transactions[transactionId].hasVoted.length == ownersCount, "All owners must vote");
         require (transactions[transactionId].executed == false, "Transaction already executed");
-        require (transactions[transactionId].hasApproved.length >= ownersCount/2, "Transaction Denied. Not enough approvals");
+        require (transactions[transactionId].hasApproved.length >= ownersCount/2 + 1, "Transaction Denied. Not enough approvals");
         transactions[transactionId].executed = true;
         transactions[transactionId].endTimestamp = block.timestamp;
         lockedBalance -= transactions[transactionId].amount;
