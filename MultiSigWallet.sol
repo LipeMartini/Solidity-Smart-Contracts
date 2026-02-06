@@ -45,6 +45,7 @@ contract MultiSigWallet {
         address[] hasApproved;
         address payable to;
         uint256 amount;
+        bool exists;
         bool executed;
         uint256 startTimestamp;
         uint256 endTimestamp;
@@ -75,6 +76,7 @@ contract MultiSigWallet {
             hasApproved: new address[](0),
             to: to,
             amount: amount,
+            exists: true,
             executed: false,
             startTimestamp: block.timestamp,
             endTimestamp: 0
@@ -103,10 +105,12 @@ contract MultiSigWallet {
     }
 
     function executeTransaction(uint transactionId) public onlyOwner {
+        require (transactions[transactionId].exists, "Transaction does not exist");
         require (transactions[transactionId].hasVoted.length == ownersCount, "All owners must vote");
         require (transactions[transactionId].executed == false, "Transaction already executed");
         require (transactions[transactionId].hasApproved.length >= ownersCount/2, "Transaction Denied. Not enough approvals");
         transactions[transactionId].executed = true;
+        transactions[transactionId].endTimestamp = block.timestamp;
         lockedBalance -= transactions[transactionId].amount;
         (bool success, ) = transactions[transactionId].to.call{value: transactions[transactionId].amount}("");
         require(success, "Transfer failed");
